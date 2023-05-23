@@ -16,20 +16,23 @@ def _preprocess(x, lon_bnds, lat_bnds):
     #     ds = ds.rename_vars({'lon':'longitude', 'lat':'latitude'})
 
     # Remove unwanted data by coordinates
-    # ds = x.where((x.latitude<=lat_bnds[1]) & (x.latitude>=lat_bnds[0]) & (x.longitude<=lon_bnds[1]) & (x.longitude>=lon_bnds[0]), drop=True)
+    ds = x.where((x.latitude<=lat_bnds[1]) & (x.latitude>=lat_bnds[0]) & (x.longitude<=lon_bnds[1]) & (x.longitude>=lon_bnds[0]), drop=True)
     # ds = x.where((x.lat<=lat_bnds[1]) & (x.lat>=lat_bnds[0]) & (x.lon<=lon_bnds[1]) & (x.lon>=lon_bnds[0]), drop=True)
 
     # Remove unwanted years
-    # data = ds.where((ds['time.year']>=1992),drop=True)
-    y = x['RR']
+    # data = ds.where((ds['time.year']>=2022) & (ds['time.month']==1) & (ds['time.day']==1),drop=True)
+    data = ds.where((ds['time.year']>=2022) & (ds['time.month']==1),drop=True)
+    # data['frost'] = data.where(data['tx'] < 0, data['frost'] == 1, data['frost'] == 0)
+    # y = x['RR']
     # Return daily sums
-    sums = y.resample(time="1d").sum()
+    # sums = y.resample(time="1d").sum()
     # Return daily means
-    means = x[['T2M', 'GL', 'RH2M']]
-    means = means.resample(time="1d").mean()
+    # means = x[['T2M', 'GL', 'RH2M']]
+    # means = means.resample(time="1d").mean()
 
-    return xr.merge([means,sums])
-    # return data
+    # return xr.merge([means,sums])
+    return data
+    # return ds
 
 
 # HAVERSINE DISTANCE
@@ -110,23 +113,59 @@ def get_files_in_folder(path):
             files.append(f)
     return files
 
-
-# path = f"data/copernicus_netcdf"
+years = "2011-2022"
+file = "tx_ens_mean_0.1deg_reg_2011-2022_v27.0e.nc"
+path = f"data/copernicus_netcdf/{years}/{file}"
+path = f"data/copernicus_netcdf/{years}/"
 
 # BOX BOUNDARIES
-# lon_bnds, lat_bnds = (13, 16.7), (46, 48)
-# partial_func = partial(_preprocess, lon_bnds=lon_bnds, lat_bnds=lat_bnds)
+# SWEDEN BOUNDS
+lon_bnds, lat_bnds = (10.9, 24.2), (54.9, 69)
+partial_func = partial(_preprocess, lon_bnds=lon_bnds, lat_bnds=lat_bnds)
 
 # OPEN ALL DATASETS AT ONCE
 # data = xr.open_mfdataset(
-#     # f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func
+#     f"{path}*.nc", combine='by_coords', preprocess=partial_func
 #     # path, combine='nested', concat_dim='time', preprocess=partial_func
-#     f"{path}*.nc", combine='nested', concat_dim='time'
+#     # f"{path}*.nc", combine='nested', concat_dim='time'
 # )
 
+# OPEN ONE DATASET 
+# data = xr.open_dataset(path)
+# data = partial_func(data)
+
+# GET FROST DAYS
+# data = data.assign(frost_days = lambda x: x['tx'] < 0)
+# y = data['frost_days']
+# sums = y.resample(time="1m").sum()
+# print(data)
+# print(sums)
+
+# vars = ['hu', 'qq' , 'rr', 'tg', 'tx', 'latitude', 'longitude']
+# vars = ['frost_days', 'latitude', 'longitude']
+# df = convert_copernicus_to_df(sums, vars)
+# df['lat'] = np.around(df['lat'],decimals=2)
+# df['lon'] = np.around(df['lon'],decimals=2)
+# CLIMATE IDS
+# grouped = df.groupby(["lat", "lon"],as_index=True)
+# df['climID'] = grouped.grouper.group_info[0]
+# print(df)
+# # WRITE CSV
+# csv_path = f'data/csv/test/frost_days.csv'
+# df.to_csv(csv_path)
 
 
+# GET CLIMATE IDS FOR SITES
+ref_path = f"data/csv/climateIdReference.csv"
+ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+sites_path = f"data/csv/coords.csv"
+sites_df = pd.read_csv(sites_path,index_col = [0])
+# sites_df = sites_df.head(300)
+sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
+sites_df.to_csv('data/csv/coords_climid.csv')
+print(sites_df)
 
+# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
 
 # INCA ONE YEAR NETCDF TO PREBAS CSV
 def inca_netcdf_to_prebas():
