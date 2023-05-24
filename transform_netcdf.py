@@ -35,6 +35,27 @@ def _preprocess(x, lon_bnds, lat_bnds):
     # return ds
 
 
+def _preprocess2(x, coords):
+    # print(coords.iloc[0]['lat'])
+    # print(coords.iloc[0]['lon'])
+    # print(coords['lat'].values)
+    # ds = x.where((x['time.year']>=2022) & (x['time.month']<3),drop=True)
+    ds = x.where((x['time.year']>2002) & (x['time.year']<2021), drop=True)
+    # ONE INDEX WITH ONLY THE NECESSARY COORDINATES
+    data = ds.sel(latitude = coords['lat'].to_xarray(), longitude = coords['lon'].to_xarray(), method = 'nearest')
+    # GET FROST DAYS
+    data = data.assign(frost_days = lambda x: x['tx'] < 0)
+    y = data['frost_days']
+    sums = y.resample(time="1m").sum()
+    # TO DATAFRAME
+    vars = ['frost_days', 'latitude', 'longitude']
+    df = convert_copernicus_to_df(sums, vars)
+    df['lat'] = np.around(df['lat'],decimals=2)
+    df['lon'] = np.around(df['lon'],decimals=2)
+
+    return df
+    # return sums
+
 # HAVERSINE DISTANCE
 # CODE FROM: 
 # https://medium.com/analytics-vidhya/finding-nearest-pair-of-latitude-and-longitude-match-using-python-ce50d62af546
@@ -68,11 +89,12 @@ def find_nearest_coords(df, lat, long):
 # CONVERT TO DF
 def convert_copernicus_to_df(dataset, vars):
     df = dataset.to_dataframe()
-    df.reset_index(inplace=True)
-    df.set_index(df['time'], inplace=True)
-    df=df[vars]
-    df.rename(columns={'latitude':'lat', 'longitude':'lon'}, inplace=True)
-    return df
+    new = df.reset_index(level=('index'))
+    # df.set_index(df['time'], inplace=True)
+    # df=df[vars]
+    # df.rename(columns={'latitude':'lat', 'longitude':'lon'}, inplace=True)
+    new.rename(columns={'latitude':'lat', 'longitude':'lon', 'index': 'climID'}, inplace=True)
+    return new
 
 # TRANSFORM DATAFRAME
 def transform_df(df, columns, rename_cols):
@@ -114,26 +136,65 @@ def get_files_in_folder(path):
     return files
 
 years = "2011-2022"
-file = "tx_ens_mean_0.1deg_reg_2011-2022_v27.0e.nc"
-path = f"data/copernicus_netcdf/{years}/{file}"
-path = f"data/copernicus_netcdf/{years}/"
+var = 'tx'
+# file = "tx_ens_mean_0.1deg_reg_2011-2022_v27.0e.nc"
+# path = f"data/copernicus_netcdf/{years}/{file}"
+# path = f"data/copernicus_netcdf/{years}/"
+path = f"data/copernicus_netcdf/vars/{var}/"
+folder = f'data/copernicus_netcdf/vars/tx/'
+
+
+# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
+ref_path = f"data/csv/climateIdReference.csv"
+ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+sites_path = f"data/csv/coords_climid.csv"
+sites_df = pd.read_csv(sites_path, index_col = [0])
+ids = sites_df['climID']
+ids = ids.unique()
+# print(ids)
+coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
+coords = coords_df[['lat', 'lon']]
+lats = coords['lat'].unique()
+lons = coords['lon'].unique()
+# print(len(lats))
+# print(len(lons))
+# coords = coords.head(1)
+# print(coords.iloc[0]['lat'])
 
 # BOX BOUNDARIES
 # SWEDEN BOUNDS
 lon_bnds, lat_bnds = (10.9, 24.2), (54.9, 69)
-partial_func = partial(_preprocess, lon_bnds=lon_bnds, lat_bnds=lat_bnds)
+# partial_func = partial(_preprocess, lat_bnds=lat_bnds, lon_bnds=lon_bnds)
+partial_func = partial(_preprocess2, coords=coords)
 
 # OPEN ALL DATASETS AT ONCE
 # data = xr.open_mfdataset(
-#     f"{path}*.nc", combine='by_coords', preprocess=partial_func
+#     # f"{path}*.nc", combine='by_coords', preprocess=partial_func
 #     # path, combine='nested', concat_dim='time', preprocess=partial_func
-#     # f"{path}*.nc", combine='nested', concat_dim='time'
+#     f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func
 # )
 
-# OPEN ONE DATASET 
-# data = xr.open_dataset(path)
-# data = partial_func(data)
 
+# GET FILES
+files = get_files_in_folder(folder)
+# data = xr.open_dataset(files[1])
+# data = partial_func(data)
+df = pd.DataFrame()
+# print(data)
+# OPEN ONE DATASET 
+for i, file in enumerate(files):
+    data = xr.open_dataset(file)
+    data = partial_func(data)
+    if i == 0:
+        df = data
+    else:
+        df = pd.concat([df, data])
+
+# csv_path = f'data/csv/frost_days_monthly_all.csv'
+# df.to_csv(csv_path)
+print(df)
+
+    # print(data)
 # GET FROST DAYS
 # data = data.assign(frost_days = lambda x: x['tx'] < 0)
 # y = data['frost_days']
@@ -142,30 +203,34 @@ partial_func = partial(_preprocess, lon_bnds=lon_bnds, lat_bnds=lat_bnds)
 # print(sums)
 
 # vars = ['hu', 'qq' , 'rr', 'tg', 'tx', 'latitude', 'longitude']
+# vars = ['tx', 'latitude', 'longitude']
 # vars = ['frost_days', 'latitude', 'longitude']
-# df = convert_copernicus_to_df(sums, vars)
+# df = convert_copernicus_to_df(data, vars)
 # df['lat'] = np.around(df['lat'],decimals=2)
 # df['lon'] = np.around(df['lon'],decimals=2)
+# print(df)
 # CLIMATE IDS
 # grouped = df.groupby(["lat", "lon"],as_index=True)
 # df['climID'] = grouped.grouper.group_info[0]
-# print(df)
+
 # # WRITE CSV
 # csv_path = f'data/csv/test/frost_days.csv'
 # df.to_csv(csv_path)
 
 
 # GET CLIMATE IDS FOR SITES
-ref_path = f"data/csv/climateIdReference.csv"
-ref_df = pd.read_csv(ref_path, parse_dates=['time'])
-sites_path = f"data/csv/coords.csv"
-sites_df = pd.read_csv(sites_path,index_col = [0])
-# sites_df = sites_df.head(300)
-sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
-sites_df.to_csv('data/csv/coords_climid.csv')
-print(sites_df)
+# ref_path = f"data/csv/climateIdReference.csv"
+# ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+# sites_path = f"data/csv/coords.csv"
+# sites_df = pd.read_csv(sites_path,index_col = [0])
+# # sites_df = sites_df.head(300)
+# sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
+# sites_df.to_csv('data/csv/coords_climid.csv')
+# print(sites_df)
 
-# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
+
+
+
 
 # INCA ONE YEAR NETCDF TO PREBAS CSV
 def inca_netcdf_to_prebas():
