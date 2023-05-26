@@ -35,24 +35,31 @@ def _preprocess(x, lon_bnds, lat_bnds):
     # return ds
 
 
-def _preprocess2(x, coords, var):
+def _preprocess2(x, coords, function):
 
     # ds = x.where((x['time.year']>=2022) & (x['time.month']<3),drop=True)
-    ds = x.where((x['time.year']>2002) & (x['time.year']<2021), drop=True)
-    # ds = x.where((x['time.year']==2003) & (x['time.month']<2), drop=True)
+    # ds = x.where((x['time.year']>2002) & (x['time.year']<2021), drop=True)
+    ds = x.where((x['time.year']==2003) & (x['time.month']<2), drop=True)
     
 
     # ONE INDEX WITH ONLY THE NECESSARY COORDINATES
     data = ds.sel(latitude = coords['lat'].to_xarray(), longitude = coords['lon'].to_xarray(), method = 'nearest')
     
     # CONVERT DAILY qq TO rss 
-    data = data.assign(rss = lambda x: x['qq'] *0.0864)
+    # data = data.assign(rss = lambda x: x['qq'] *0.0864)
     # CONVERT DAILY rss TO MONTHLY MEANS
-    y = data['rss']
-    data_arr = y.resample(time="1m").mean()
-    data = data_arr.to_dataset()
+    # y = data['rss']
+    # data_arr = y.resample(time="1m").mean()
+    # data = data_arr.to_dataset()
     # CONVERT rss TO par
-    data = data.assign(par = lambda x: x['rss'] *0.44*4.56)
+    # data = data.assign(par = lambda x: x['rss'] *0.44*4.56)
+    # var = list(data.keys())[0]
+    # data = function(data, var)
+    data = data.assign(frost_days = lambda x: x['tx'] < 0)
+    # print(data.index[0])
+
+    # GET DATA FOR ONE ID FOR TESTING
+    data = data.where(data.index == data.index[0])
     return data
 
     # Return daily means
@@ -139,39 +146,63 @@ def get_files_in_folder(path):
             files.append(f)
     return files
 
-years = "2011-2022"
-var = 'qq'
-# file = "tx_ens_mean_0.1deg_reg_2011-2022_v27.0e.nc"
-# path = f"data/copernicus_netcdf/{years}/{file}"
-# path = f"data/copernicus_netcdf/{years}/"
-# path = f"data/copernicus_netcdf/vars/{var}/qq_ens_mean_0.1deg_reg_1995-2010_v27.0e.nc"
-path = f"data/copernicus_netcdf/vars/{var}/"
-# folder = f'data/copernicus_netcdf/vars/tx/'
+def get_means(data, var, time='1m'):
+    y = data[var]
+    data_arr = y.resample(time=time).mean()
+    data = data_arr.to_dataset()
+    return data
+
+def get_sums(data, var, time='1m'):
+    y = data[var]
+    data_arr = y.resample(time=time).sum()
+    data = data_arr.to_dataset()
+    return data
+
+def get_frost_days(data, var, time='1m'):
+    data = data.assign(frost_days = lambda x: x[var] < 0)
+    return get_sums(data, 'frost_days', time)
+
+def get_par(data, var, time='1m'):
+    # CONVERT DAILY qq TO rss 
+    data = data.assign(rss = lambda x: x[var] *0.0864)
+    # CONVERT DAILY rss TO MONTHLY MEANS
+    data = get_means(data, 'rss', time)
+    # CONVERT rss TO par
+    data = data.assign(par = lambda x: x['rss'] *0.44*4.56)
+    return data
+# years = "2011-2022"
+var = 'tx'
+# file = "tx_ens_mean_0.1deg_reg_1995-2010_v27.0e.nc"
+# # path = f"data/copernicus_netcdf/{years}/{file}"
+# # path = f"data/copernicus_netcdf/{years}/"
+path = f"data/copernicus_netcdf/vars/{var}/tx_ens_mean_0.1deg_reg_1995-2010_v27.0e.nc"
+# path = f"data/copernicus_netcdf/vars/{var}/"
+# # path = f'data/copernicus_netcdf/all/'
 
 
-# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
-# ref_path = f"data/csv/climateIdReference.csv"
-# ref_df = pd.read_csv(ref_path, parse_dates=['time'])
-# sites_path = f"data/csv/coords_climid.csv"
-# sites_df = pd.read_csv(sites_path, index_col = [0])
-# ids = sites_df['climID']
+# # GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
+ref_path = f"data/csv/climateIdReference.csv"
+ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+sites_path = f"data/csv/coords_climid.csv"
+sites_df = pd.read_csv(sites_path, index_col = [0])
+ids = sites_df['climID']
 # ids = ids.unique()
-# coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
-# coords = coords_df[['lat', 'lon']]
-# lats = coords['lat'].unique()
-# lons = coords['lon'].unique()
-# print(len(lats))
-# print(len(lons))
-# coords = coords.head(1)
-# print(coords.iloc[0]['lat'])
+coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
+coords = coords_df[['lat', 'lon']]
+# # lats = coords['lat'].unique()
+# # lons = coords['lon'].unique()
+# # print(len(lats))
+# # print(len(lons))
+# # coords = coords.head(1)
+# # print(coords.iloc[0]['lat'])
+function = get_frost_days
+# # BOX BOUNDARIES
+# # SWEDEN BOUNDS
+# # lon_bnds, lat_bnds = (10.9, 24.2), (54.9, 69)
+# # partial_func = partial(_preprocess, lat_bnds=lat_bnds, lon_bnds=lon_bnds)
+partial_func = partial(_preprocess2, coords=coords, function=function)
 
-# BOX BOUNDARIES
-# SWEDEN BOUNDS
-# lon_bnds, lat_bnds = (10.9, 24.2), (54.9, 69)
-# partial_func = partial(_preprocess, lat_bnds=lat_bnds, lon_bnds=lon_bnds)
-# partial_func = partial(_preprocess2, coords=coords, var=var)
-
-# OPEN ALL DATASETS AT ONCE
+# # OPEN ALL DATASETS AT ONCE
 # data = xr.open_mfdataset(
 #     # f"{path}*.nc", combine='by_coords', preprocess=partial_func
 #     # path, combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
@@ -179,13 +210,18 @@ path = f"data/copernicus_netcdf/vars/{var}/"
 # )
 
 
-# GET FILES
-# files = get_files_in_folder(path)
-# data = xr.open_dataset(files[1])
+# data = xr.open_dataset(path)
 # data = partial_func(data)
-# df = pd.DataFrame()
+# print(data)
 
 
+# # GET FILES
+# # files = get_files_in_folder(path)
+# # data = xr.open_dataset(files[1])
+# # data = partial_func(data)
+# # df = pd.DataFrame()
+
+# # new_path = f"data/copernicus_netcdf/all/all_vars"
 # new = data.to_netcdf()
 # data = xr.open_dataset(new)
 # print(data)
@@ -195,8 +231,9 @@ path = f"data/copernicus_netcdf/vars/{var}/"
 # df['lon'] = np.around(df['lon'],decimals=2)
 # csv_path = f'data/csv/par_monthly_all.csv'
 # df.to_csv(csv_path)
+# df.dropna(inplace=True)
+# print(df['frost_days'].sum())
 # print(df)
-
 
 #2.980552122
 
@@ -247,34 +284,51 @@ path = f"data/copernicus_netcdf/vars/{var}/"
 # sites_df.to_csv('data/csv/coords_climid.csv')
 # print(sites_df)
 
-def calculate_vpd_from_np_arrays(tair,rh):
-    svp = 610.7 * 10**(7.5*tair/(237.3+tair))
-    vpd = svp * (1-(rh/100)) / 1000
-    return vpd
+# def calculate_vpd_from_np_arrays(tair,rh):
+#     svp = 610.7 * 10**(7.5*tair/(237.3+tair))
+#     vpd = svp * (1-(rh/100)) / 1000
+#     return vpd
 
 
-fd = pd.read_csv("data/csv/frost_days_monthly_all.csv", parse_dates=['time'])
-hu = pd.read_csv("data/csv/hu_monthly_all.csv", parse_dates=['time'])
-rr = pd.read_csv("data/csv/rr_monthly_all.csv", parse_dates=['time'])
-tg = pd.read_csv("data/csv/tg_monthly_all.csv", parse_dates=['time'])
-par = pd.read_csv("data/csv/par_monthly_all.csv", parse_dates=['time'])
+# fd = pd.read_csv("data/csv/frost_days_monthly_all.csv", parse_dates=['time'])
+# hu = pd.read_csv("data/csv/hu_monthly_all.csv", parse_dates=['time'])
+# rr = pd.read_csv("data/csv/rr_monthly_all.csv", parse_dates=['time'])
+# tg = pd.read_csv("data/csv/tg_monthly_all.csv", parse_dates=['time'])
+# par = pd.read_csv("data/csv/par_monthly_all.csv", parse_dates=['time'])
 
 
 
-hu = hu['hu']
-rr = rr['rr']
-tg = tg['tg']
-par = par['par']
-df = fd.assign(rh=hu,precip=rr,tair=tg,par=par)
+# hu = hu['hu']
+# rr = rr['rr']
+# tg = tg['tg']
+# par = par['par']
+# df = fd.assign(rh=hu,precip=rr,tair=tg,par=par)
 
-tair = np.array(df['tair'])
-rh = np.array(df['rh'])
-applyvpd = np.vectorize(calculate_vpd_from_np_arrays)
-vpd = applyvpd(tair,rh)
-df = df.assign(vpd=vpd)
-csv_path = f'data/csv/prebas_sweden_may23_monthly.csv'
-df.to_csv(csv_path,index=False)
-print(df)
+# tair = np.array(df['tair'])
+# rh = np.array(df['rh'])
+# applyvpd = np.vectorize(calculate_vpd_from_np_arrays)
+# vpd = applyvpd(tair,rh)
+# df = df.assign(vpd=vpd)
+# csv_path = f'data/csv/prebas_sweden_may23_monthly_auto.csv'
+# df.to_csv(csv_path,index=False)
+# print(df)
+
+# df = pd.read_csv(csv_path, parse_dates=['year'])
+# df = pd.read_csv(csv_path)
+# df = df.drop(columns=df.columns[0])
+# print(df)
+# df.to_csv(csv_path,index=False)
+# df = df.reset_index(level=('time'))
+# year = df['time'].dt.year
+# month = df['time'].dt.month
+# df = df.assign(year=year, month=month)
+# df = df.drop(columns=['time'])
+# cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd']
+# df = df.loc[:, cols]
+# print(df)
+# df = df.drop(columns=['rh'])
+# df.to_csv(csv_path,index=False)
+
 
 
 # INCA ONE YEAR NETCDF TO PREBAS CSV
