@@ -119,69 +119,80 @@ def get_climID_reference(path):
 def get_bounds(sites_path):
     return
 
-netcdfs = []
-vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums]]
-# vars = [['hu', get_means], ['tg', get_means]]
+# netcdfs = []
+# # vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums]]
+# vars = [['tn', get_means], ['tx', get_means], ['tg', get_means]]
 
 
-# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
-ref_path = f"data/csv/climateIdReference.csv"
-ref_df = pd.read_csv(ref_path, parse_dates=['time'])
-sites_path = f"data/csv/coords_climid.csv"
-sites_df = pd.read_csv(sites_path, index_col = [0])
-ids = sites_df['climID']
-coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
-coords = coords_df[['lat', 'lon']]
+# # GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
+# ref_path = f"data/csv/climateIdReference.csv"
+# ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+# sites_path = f"data/csv/coords_climid.csv"
+# sites_df = pd.read_csv(sites_path, index_col = [0])
+# ids = sites_df['climID']
+# coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
+# coords = coords_df[['lat', 'lon']]
 
-for v in vars:
-    print(f'Processing variable {v[0]}...')
-    var = v[0]
-    function = v[1]
-    path = f"data/copernicus_netcdf/vars/{var}/"
+# for v in vars:
+#     print(f'Processing variable {v[0]}...')
+#     var = v[0]
+#     function = v[1]
+#     path = f"data/copernicus_netcdf/vars/{var}/"
 
 
-    partial_func = partial(_preprocess2, coords=coords, function=function)
+#     partial_func = partial(_preprocess2, coords=coords, function=function)
 
-    # OPEN ALL DATASETS AT ONCE
-    data = xr.open_mfdataset(
-        f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
-    )
+#     # OPEN ALL DATASETS AT ONCE
+#     data = xr.open_mfdataset(
+#         f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
+#     )
 
-    netcdfs.append(data)
-    print(f'{v[0]} done.')
+#     netcdfs.append(data)
+#     print(f'{v[0]} done.')
 
-# GET FILES
-new = xr.merge(netcdfs, compat='override')
-print(new)
+# # GET FILES
+# new = xr.merge(netcdfs, compat='override')
+# print(new)
 
-print(f'Writing netcdf...')
-new = new.to_netcdf()
-data = xr.open_dataset(new)
-print(data)
-print(f'Done.')
+# print(f'Writing netcdf...')
+# new = new.to_netcdf()
+# data = xr.open_dataset(new)
+# print(data)
+# print(f'Done.')
 
-print(f'Converting to dataframe...')
-df = convert_copernicus_to_df(data)
-df['lat'] = np.around(df['lat'],decimals=2)
-df['lon'] = np.around(df['lon'],decimals=2)
-print(f'Done.')
+# print(f'Converting to dataframe...')
+# df = convert_copernicus_to_df(data)
+# df['lat'] = np.around(df['lat'],decimals=2)
+# df['lon'] = np.around(df['lon'],decimals=2)
+# print(f'Done.')
 
-df = get_vpd(df, 'tg', 'hu')
-df = df.rename(columns={'tg' : 'tair', 'rr':'precip'})
-df = df.drop(columns=['hu', 'rss'])
+csv_path = f'data/csv/sweden_may23_monthly_min_max_temp.csv'
+prebas_path = f'data/csv/prebas_sweden_may23_monthly_weather.csv'
+temp = pd.read_csv(csv_path)
+df = pd.read_csv(prebas_path)
+tn = temp['tn']
+tx = temp['tx']
+print(tn)
+print(tx)
+df = df.assign(t_min=tn, t_max=tx)
+print(df)
 
-# YEAR AND MONTH TO COLS
-df = df.reset_index(level=('time'))
-year = df['time'].dt.year
-month = df['time'].dt.month
-df = df.assign(year=year, month=month)
-df = df.drop(columns=['time'])
-# REARRANGE DATAFRAME
-cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd']
-df = df.loc[:, cols]
+# df = get_vpd(df, 'tg', 'hu')
+# df = df.rename(columns={'tg' : 'tair', 'rr':'precip'})
+# df = df.drop(columns=['hu', 'rss'])
+
+# # YEAR AND MONTH TO COLS
+# df = df.reset_index(level=('time'))
+# year = df['time'].dt.year
+# month = df['time'].dt.month
+# df = df.assign(year=year, month=month)
+# df = df.drop(columns=['time'])
+# # REARRANGE DATAFRAME
+# cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd']
+# df = df.loc[:, cols]
 
 print(f'Writing to csv...')
-csv_path = f'data/csv/prebas_sweden_may23_monthly_auto.csv'
+csv_path = f'data/csv/prebas_sweden_may23_monthly_weather.csv'
 df.to_csv(csv_path, index=False)
 print(df)
 print(f'Done.')
