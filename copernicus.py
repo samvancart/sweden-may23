@@ -1,3 +1,7 @@
+# E-OBS weather data to prebas. Default time period = 1 month.
+
+
+
 import xarray as xr
 import pandas as pd
 import numpy as np
@@ -6,6 +10,16 @@ from math import radians, cos, sin, asin, sqrt
 import os
 
 
+
+def get_files_in_folder(path):
+    files = []
+    for filename in os.listdir(path):
+        f = os.path.join(path, filename)
+        # checking if it is a file
+        if os.path.isfile(f):
+            print(f)
+            files.append(f)
+    return files
 
 # HAVERSINE DISTANCE
 # CODE FROM: 
@@ -103,96 +117,146 @@ def convert_copernicus_to_df(dataset):
     new.rename(columns={'latitude':'lat', 'longitude':'lon', 'index': 'climID'}, inplace=True)
     return new
 
-# GET CLIMATE IDS FOR SITES
-def climateIDs_for_sites(ref_path, sites_path):
+# GET CLIMATE IDS FOR SITES FROM CSV
+def climateIDs_for_sites_from_csv(ref_path, sites_path):
     ref_df = pd.read_csv(ref_path, parse_dates=['time'])
     sites_df = pd.read_csv(sites_path,index_col = [0])
     sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
     # sites_df.to_csv('data/csv/sites_climid.csv')
     print(sites_df)
 
+# GET CLIMATE IDS FOR SITES
+def climateIDs_for_sites_from_files(ref_df, sites_path):
+    sites_df = pd.read_csv(sites_path,index_col = [0])
+    sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
+    sites_df.to_csv('data/csv/test/sites_climid_test.csv')
+    return sites_df
 
-def get_climID_reference(path):
-    return
+# GET NETCDF WITH LAT AND LON BOUNDS FOR 1 DAY
+def get_climID_reference_netcdf(netcdf_path, lat_bnds, lon_bnds, year):
+    partial_func = partial(_preprocess1, lat_bnds=lat_bnds, lon_bnds=lon_bnds, year=year)
+    data = xr.open_dataset(netcdf_path)
+    data = partial_func(data)
+    new = data.to_netcdf()
+    
+    return new
+
+def get_climID_reference_df(netcdf_file):
+    data = xr.open_dataset(netcdf_file)
+    df = data.to_dataframe()
+
+    # GROUP BY LAT LON AND ASSIGN IDS
+    grouped = df.groupby(["latitude", "longitude"], as_index=True)
+    df['climID'] = grouped.grouper.group_info[0]
+
+    # RENAME AND REMOVE VAR COLUMN
+    new = df.reset_index(level=('time', 'latitude', 'longitude'))
+    new.rename(columns={'latitude':'lat', 'longitude':'lon'}, inplace=True)
+    new = new[['time', 'lat','lon', 'climID']]
+
+    return new
 
 
-def get_bounds(sites_path):
-    return
+def get_bounds(sites_df, buffer=0.1):
+    lat = sites_df.lat
+    lon = sites_df.lon
+    lat_bounds = (lat.min()-buffer, lat.max()+buffer)
+    lon_bounds = (lon.min()-buffer, lon.max()+buffer)
+    return lat_bounds, lon_bounds
 
-# netcdfs = []
-# # vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums]]
+# GET STARTING LAT LON BOUNDS FROM SITES FILE
+sites_path = f"data/csv/coords.csv"
+sites_df = pd.read_csv(sites_path)
+bnds = get_bounds(sites_df)
+lat_bnds, lon_bnds = bnds[0], bnds[1]
+print(lat_bnds, lon_bnds)
+
+# DEFINE YEAR AND VARIABLE (CAN BE ANY) FOR REFERENCE CLIMID DF
+year = 1995
+var = 'tg'
+folder = f"data/copernicus_netcdf/vars/{var}/"
+netcdf_path = get_files_in_folder(folder)
+netcdf_path=netcdf_path[0]
+
+print('Writing reference netcdf...')
+netcdf_file = get_climID_reference_netcdf(netcdf_path, lat_bnds, lon_bnds, year)
+print('Done.')
+
+print('Writing reference df...')
+ref_df = get_climID_reference_df(netcdf_file)
+print('Done.')
+
+print('Writing climate ids for sites...')
+sites_df = climateIDs_for_sites_from_files(ref_df, sites_path)
+print(sites_df)
+print('Done.')
+
+
+netcdfs = []
+vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums], ['tn', get_means], ['tx', get_means]]
 # vars = [['tn', get_means], ['tx', get_means], ['tg', get_means]]
 
 
-# # GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
+# GET RELEVANT COORDS LIST (FILTERED BY SITE FILE CLIMATE IDS)
 # ref_path = f"data/csv/climateIdReference.csv"
 # ref_df = pd.read_csv(ref_path, parse_dates=['time'])
 # sites_path = f"data/csv/coords_climid.csv"
 # sites_df = pd.read_csv(sites_path, index_col = [0])
-# ids = sites_df['climID']
-# coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
-# coords = coords_df[['lat', 'lon']]
+ids = sites_df['climID']
+coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
+coords = coords_df[['lat', 'lon']]
 
-# for v in vars:
-#     print(f'Processing variable {v[0]}...')
-#     var = v[0]
-#     function = v[1]
-#     path = f"data/copernicus_netcdf/vars/{var}/"
+# PROCESS EACH VAR
+for v in vars:
+    print(f'Processing variable {v[0]}...')
+    var = v[0]
+    function = v[1]
+    path = f"data/copernicus_netcdf/vars/{var}/"
 
 
-#     partial_func = partial(_preprocess2, coords=coords, function=function)
+    partial_func = partial(_preprocess2, coords=coords, function=function)
 
-#     # OPEN ALL DATASETS AT ONCE
-#     data = xr.open_mfdataset(
-#         f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
-#     )
+    # OPEN ALL DATASETS AT ONCE
+    data = xr.open_mfdataset(
+        f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
+    )
 
-#     netcdfs.append(data)
-#     print(f'{v[0]} done.')
+    netcdfs.append(data)
+    print(f'{v[0]} done.')
 
-# # GET FILES
-# new = xr.merge(netcdfs, compat='override')
-# print(new)
+# GET FILES
+new = xr.merge(netcdfs, compat='override')
+print(new)
 
-# print(f'Writing netcdf...')
-# new = new.to_netcdf()
-# data = xr.open_dataset(new)
-# print(data)
-# print(f'Done.')
+print(f'Writing netcdf...')
+new = new.to_netcdf()
+data = xr.open_dataset(new)
+print(data)
+print(f'Done.')
 
-# print(f'Converting to dataframe...')
-# df = convert_copernicus_to_df(data)
-# df['lat'] = np.around(df['lat'],decimals=2)
-# df['lon'] = np.around(df['lon'],decimals=2)
-# print(f'Done.')
+print(f'Converting to dataframe...')
+df = convert_copernicus_to_df(data)
+df['lat'] = np.around(df['lat'],decimals=2)
+df['lon'] = np.around(df['lon'],decimals=2)
+print(f'Done.')
 
-csv_path = f'data/csv/sweden_may23_monthly_min_max_temp.csv'
-prebas_path = f'data/csv/prebas_sweden_may23_monthly_weather.csv'
-temp = pd.read_csv(csv_path)
-df = pd.read_csv(prebas_path)
-tn = temp['tn']
-tx = temp['tx']
-print(tn)
-print(tx)
-df = df.assign(t_min=tn, t_max=tx)
-print(df)
+df = get_vpd(df, 'tg', 'hu')
+df = df.rename(columns={'tg' : 'tair', 'rr':'precip', 'tx': 't_max', 'tn': 't_min'})
+df = df.drop(columns=['hu', 'rss'])
 
-# df = get_vpd(df, 'tg', 'hu')
-# df = df.rename(columns={'tg' : 'tair', 'rr':'precip'})
-# df = df.drop(columns=['hu', 'rss'])
+# YEAR AND MONTH TO COLS
+df = df.reset_index(level=('time'))
+year = df['time'].dt.year
+month = df['time'].dt.month
+df = df.assign(year=year, month=month)
+df = df.drop(columns=['time'])
 
-# # YEAR AND MONTH TO COLS
-# df = df.reset_index(level=('time'))
-# year = df['time'].dt.year
-# month = df['time'].dt.month
-# df = df.assign(year=year, month=month)
-# df = df.drop(columns=['time'])
-# # REARRANGE DATAFRAME
-# cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd']
-# df = df.loc[:, cols]
+# REARRANGE DATAFRAME
+cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd', 't_min', 't_max']
+df = df.loc[:, cols]
 
 print(f'Writing to csv...')
-csv_path = f'data/csv/prebas_sweden_may23_monthly_weather.csv'
+csv_path = f'data/csv/test/prebas_sweden_may23_monthly_weather_test_buffer_0.5.csv'
 df.to_csv(csv_path, index=False)
 print(df)
 print(f'Done.')

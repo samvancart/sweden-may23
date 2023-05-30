@@ -55,11 +55,11 @@ def _preprocess2(x, coords, function):
     # data = data.assign(par = lambda x: x['rss'] *0.44*4.56)
     # var = list(data.keys())[0]
     # data = function(data, var)
-    data = data.assign(frost_days = lambda x: x['tx'] < 0)
+    # data = data.assign(frost_days = lambda x: x['tx'] < 0)
     # print(data.index[0])
 
     # GET DATA FOR ONE ID FOR TESTING
-    data = data.where(data.index == data.index[0])
+    # data = data.where(data.index == data.index[0])
     return data
 
     # Return daily means
@@ -210,9 +210,9 @@ partial_func = partial(_preprocess2, coords=coords, function=function)
 # )
 
 
-# data = xr.open_dataset(path)
-# data = partial_func(data)
-# print(data)
+data = xr.open_dataset(path)
+data = partial_func(data)
+print(np.around(data.latitude, decimals=2))
 
 
 # # GET FILES
