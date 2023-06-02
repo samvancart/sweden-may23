@@ -1,4 +1,4 @@
-# E-OBS weather data to prebas. Default time period = 1 month.
+# E-OBS weather data to prebas format. Default time period = 1 month.
 
 
 
