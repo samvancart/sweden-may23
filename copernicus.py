@@ -164,7 +164,7 @@ def get_bounds(sites_df, buffer=0.1):
     lon_bounds = (lon.min()-buffer, lon.max()+buffer)
     return lat_bounds, lon_bounds
 
-# GET STARTING LAT LON BOUNDS FROM SITES FILE
+# GET INITIAL LAT LON BOUNDS FROM SITES FILE
 sites_path = f"data/csv/coords.csv"
 sites_df = pd.read_csv(sites_path)
 bnds = get_bounds(sites_df)
@@ -191,8 +191,9 @@ sites_df = climateIDs_for_sites_from_files(ref_df, sites_path)
 print(sites_df)
 print('Done.')
 
-
+# NETCDF FOR EACH VAR
 netcdfs = []
+# LIST OF VARIABLES. EACH ITEM HAS VARIABLE NAME AND SPECIFIC FUNCTION 
 vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums], ['tn', get_means], ['tx', get_means]]
 # vars = [['tn', get_means], ['tx', get_means], ['tg', get_means]]
 
