@@ -191,7 +191,7 @@ sites_df = climateIDs_for_sites_from_files(ref_df, sites_path)
 print(sites_df)
 print('Done.')
 
-# NETCDF FOR EACH VAR
+# NETCDF FOR EACH VARIABLE
 netcdfs = []
 # LIST OF VARIABLES. EACH ITEM HAS VARIABLE NAME AND SPECIFIC FUNCTION 
 vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums], ['tn', get_means], ['tx', get_means]]
