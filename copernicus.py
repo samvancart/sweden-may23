@@ -129,7 +129,7 @@ def climateIDs_for_sites_from_csv(ref_path, sites_path):
 def climateIDs_for_sites_from_files(ref_df, sites_path):
     sites_df = pd.read_csv(sites_path,index_col = [0])
     sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
-    sites_df.to_csv('data/csv/test/sites_climid_test.csv')
+    # sites_df.to_csv('data/csv/coords_climid_nans_removed.csv')
     return sites_df
 
 # GET NETCDF WITH LAT AND LON BOUNDS FOR 1 DAY
@@ -164,6 +164,7 @@ def get_bounds(sites_df, buffer=0.1):
     lon_bounds = (lon.min()-buffer, lon.max()+buffer)
     return lat_bounds, lon_bounds
 
+
 # GET INITIAL LAT LON BOUNDS FROM SITES FILE
 sites_path = f"data/csv/coords.csv"
 sites_df = pd.read_csv(sites_path)
@@ -193,7 +194,7 @@ print('Done.')
 
 # NETCDF FOR EACH VARIABLE
 netcdfs = []
-# LIST OF VARIABLES. EACH ITEM HAS VARIABLE NAME AND SPECIFIC FUNCTION 
+# LIST OF VARIABLES. EACH ITEM INCLUDES VARIABLE NAME AND SPECIFIC FUNCTION 
 vars = [['hu', get_means], ['tg', get_means], ['tx', get_frost_days], ['qq', get_par], ['rr', get_sums], ['tn', get_means], ['tx', get_means]]
 # vars = [['tn', get_means], ['tx', get_means], ['tg', get_means]]
 
@@ -207,25 +208,28 @@ ids = sites_df['climID']
 coords_df = ref_df.loc[ref_df['climID'].isin(ids)]
 coords = coords_df[['lat', 'lon']]
 
+def process_vars2(vars, coords):
 # PROCESS EACH VAR
-for v in vars:
-    print(f'Processing variable {v[0]}...')
-    var = v[0]
-    function = v[1]
-    path = f"data/copernicus_netcdf/vars/{var}/"
+    for v in vars:
+        print(f'Processing variable {v[0]}...')
+        var = v[0]
+        function = v[1]
+        path = f"data/copernicus_netcdf/vars/{var}/"
 
 
-    partial_func = partial(_preprocess2, coords=coords, function=function)
+        partial_func = partial(_preprocess2, coords=coords, function=function)
 
-    # OPEN ALL DATASETS AT ONCE
-    data = xr.open_mfdataset(
-        f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
-    )
+        # OPEN ALL DATASETS AT ONCE
+        data = xr.open_mfdataset(
+            f"{path}*.nc", combine='nested', concat_dim='time', preprocess=partial_func, chunks='auto'
+        )
 
-    netcdfs.append(data)
-    print(f'{v[0]} done.')
+        netcdfs.append(data)
+        print(f'{v[0]} done.')
+        return netcdfs
 
 # GET FILES
+netcdfs = process_vars2(vars, coords)
 new = xr.merge(netcdfs, compat='override')
 print(new)
 
@@ -261,5 +265,3 @@ csv_path = f'data/csv/test/prebas_sweden_may23_monthly_weather_test_buffer_0.5.c
 df.to_csv(csv_path, index=False)
 print(df)
 print(f'Done.')
-
-
