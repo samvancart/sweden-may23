@@ -1,90 +1,85 @@
+# ASSIGN CLIMATE IDS TO SITES
+
+
+import xarray as xr
 import pandas as pd
 import numpy as np
-import pyproj
+from math import radians, cos, sin, asin, sqrt
+from functools import partial
+
+import variable_handler as vh
+
+# HAVERSINE DISTANCE
+# CODE FROM: 
+# https://medium.com/analytics-vidhya/finding-nearest-pair-of-latitude-and-longitude-match-using-python-ce50d62af546
+def dist(lat1, lon1, lat2, lon2):
+    """
+    Replicating the same formula as mentioned in Wiki
+    """
+    # convert decimal degrees to radians 
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    # haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a)) 
+    # Radius of earth in kilometers is 6371
+    km = 6371* c
+    return km
+
+# FIND NEAREST COORDINATES TO GIVEN COORDINATES IN A DATAFRAME 
+# CODE FROM: 
+# https://medium.com/analytics-vidhya/finding-nearest-pair-of-latitude-and-longitude-match-using-python-ce50d62af546
+def find_nearest_coords(df, latitude, longitude, lat = 'lat', lon = 'lon'):
+    distances = df.apply(
+        lambda row: dist(latitude, longitude, row[lat], row[lon]), 
+        axis=1)
+    row = df.loc[distances.idxmin()]
+    return row['climID']
 
 
-def coords_from_lambert(row):
-    x = row['X_LAMBERT_R']*1000
-    y = row['Y_LAMBERT_R']*1000
-    transformer = pyproj.Transformer.from_crs("epsg:3416", "epsg:4326")
-    return transformer.transform(x, y)
+# GET CLIMATE IDS FOR SITES FROM CSV
+def climateIDs_for_sites_from_csv(ref_path, sites_path):
+    ref_df = pd.read_csv(ref_path, parse_dates=['time'])
+    sites_df = pd.read_csv(sites_path,index_col = [0])
+    sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
+    # sites_df.to_csv('data/csv/sites_climid.csv')
+    print(sites_df)
 
-def get_bounds(lat, lon, box_width=0.1):
-    l_lat = lat-(box_width/2)
-    u_lat = lat+(box_width/2)
-    l_lon = lon-(box_width/2)
-    u_lon = lon+(box_width/2)
-    lat_bounds = np.around(l_lat, decimals=2), np.around(u_lat,decimals=2)
-    lon_bounds = np.around(l_lon,decimals=2), np.around(u_lon,decimals=2)
-    return lat_bounds, lon_bounds
-     
-def assign_climIDs(df_cop,row,sites):
-    bounds = get_bounds(df_cop['lat'][row],df_cop['lon'][row])
-    lat_bnds = bounds[0]
-    lon_bnds = bounds[1]
-    mask = sites.where((sites['lat']<lat_bnds[1]) & (sites['lat']>=lat_bnds[0]) & (sites['lon']<lon_bnds[1]) & (sites['lon']>=lon_bnds[0]))
-    mask.dropna(inplace=True)
-    mask['climID'] = df_cop['climID'][row]
-    return mask
+# GET CLIMATE IDS FOR SITES
+def climateIDs_for_sites_from_files(ref_df, sites_path):
+    sites_df = pd.read_csv(sites_path,index_col = [0])
+    sites_df['climID'] = sites_df.apply(lambda x: find_nearest_coords(ref_df, x['lat'], x['lon']), axis=1)
+ 
+    return sites_df
 
-# DATA PATH
-# data_path = 'data/csv'
+# GET NETCDF WITH LAT AND LON BOUNDS FOR 1 DAY
+def get_climID_reference_netcdf(netcdf_path, lat_bnds, lon_bnds, year):
+    partial_func = partial(vh._preprocess1, lat_bnds=lat_bnds, lon_bnds=lon_bnds, year=year)
+    data = xr.open_dataset(netcdf_path)
+    data = partial_func(data)
+    new = data.to_netcdf()
+    
+    return new
 
-# # GET SITES FILE
-# # sites_file = 'esa_sites.csv'
-# # file = f'{data_path}/{sites_file}'
-# # df_sites = pd.read_csv(file)
-# # print(df_sites)
+def get_climID_reference_df(netcdf_file):
+    data = xr.open_dataset(netcdf_file)
+    df = data.to_dataframe()
 
-# # GET WEATHER FILE
-# weather_file = 'copernicus_tair_styria_2011-2021.csv'
-# file = f'{data_path}/{weather_file}'
-# df_cop = pd.read_csv(file)
-# # print(df_cop)
+    # GROUP BY LAT LON AND ASSIGN IDS
+    df = assign_climIDs(df)
 
+    # RENAME AND REMOVE VAR COLUMN
+    new = df.reset_index(level=('time', 'latitude', 'longitude'))
+    new.rename(columns={'latitude':'lat', 'longitude':'lon'}, inplace=True)
+    new = new[['time', 'lat','lon', 'climID']]
 
-# # ASSIGN REFERENCE CLIMATE ID:S
-# grouped = df_cop.groupby(["lat", "lon"],as_index=True)
-# df_cop['climID'] = grouped.grouper.group_info[0]
-# # df_cop['climID'] = df_cop['climID']+1
-# # print(df_cop)
+    return new
 
 
-# # MOCK DF
-# d = {'lat': [46.76435998,46.79171066],
-#       'lon': [15.87205907,15.90352198]}
-# df_sites = pd.DataFrame(data=d)
+# GROUP BY LAT LON AND ASSIGN IDS
+def assign_climIDs(df, lat = 'latitude', lon = 'longitude', id = 'climID'):
+    grouped = df.groupby([lat, lon], as_index=True)
+    df[id] = grouped.grouper.group_info[0]
 
-# # LENGTH OF UNIQUE CLIMATE ID:S IN REFERENCE
-# ids = len(pd.unique(df_cop['climID']))
-
-# # CREATE DATAFRAME FOR ID:S
-# d = {'lat':[],'lon':[],'climID':[]}
-# df_clim = pd.DataFrame(data=d)
-# print(df_cop.head(ids))
-
-# # GET CLIMATE IDS FOR SITES
-# for i in range(ids):
-#     data = assign_climIDs(df_cop,i,df_sites)
-#     if not data.empty:
-#         df_clim = pd.concat([df_clim,data])
-# df_clim['climID'] = df_clim['climID'].astype(int)
-
-# print(df_clim)
-
-# # GET SITES CSV WITH CLIMIDS
-# # sites_file = 'sites_climid.csv'
-# # file = f'{data_path}/{sites_file}'
-# # df_clim = pd.read_csv(file)
-# # df_clim.drop(df_clim.columns[0],axis=1,inplace=True)
-# # print(df_clim)
-# # id = 0
-# # climID = df_cop[df_cop.climID == id].iloc[0]
-# # print(climID)
-
-# # WRITE TO CSV
-# # df_cop.to_csv(f"{data_path}/copernicus_tair_styria_2011-2021_climid.csv.csv")
-# # df_clim.to_csv(f"{data_path}/sites_climid.csv")
-
-
-
+    return df
