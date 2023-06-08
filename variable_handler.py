@@ -103,7 +103,7 @@ def process_vars2(vars, coords):
         
     return netcdfs
 
-# COMBINE ALL VARS INTO ONE NETCDF WITH COORDINATES FILTERED BY BOUNDS
+# COMBINE ALL VARS INTO ONE NETCDF WITH COORDINATES WITHIN BOUNDS
 def process_vars3(vars, lat_bnds, lon_bnds, var_path):
 # PROCESS EACH VAR
     for v in vars:

@@ -37,7 +37,8 @@ def remove_nans_from_df(df):
 
 # STEP 1: PREPARE DF ACCORDING TO BOUNDS
 
-def get_nan_removal_df(sites_path, vars, var_path):
+# 1A: GET NETCDF WITH ALL VARS
+def get_all_vars_netcdf_with_bounds(sites_path, vars, var_path):
     # GET INITIAL LAT LON BOUNDS FROM SITES FILE
     sites_df = pd.read_csv(sites_path)
     bnds = uf.get_bounds(sites_df)
@@ -47,8 +48,12 @@ def get_nan_removal_df(sites_path, vars, var_path):
     netcdfs = vh.process_vars3(vars=vars, lat_bnds=lat_bnds, lon_bnds=lon_bnds, var_path=var_path)
     new = xr.merge(netcdfs)
     data = uf.write_netcdf(new)
-    print(data)
 
+    return data
+  
+
+# 1B: CONVERT NETCDF TO DF
+def get_nan_removal_df(data):
     print(f'Converting to dataframe...')
     df = get_temp_df_for_nan_removal(data)
     df = df.set_index(['lat','lon'])

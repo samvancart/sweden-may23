@@ -27,13 +27,22 @@ def main():
     filtered_df_path = f'{temp_path}/filtered_df.csv'
     prebas_path = f'{temp_path}/prebas.csv'
 
+    # DEFINE VARIABLE NAMES
+    rh = 'hu'
+    tair = 'tg'
+    t_max = 'tx'
+    t_min = 'tn'
+    qq = 'qq'
+    precip = 'rr'
+    rss = 'rss'
 
     # LIST OF VARIABLES. EACH ITEM INCLUDES VARIABLE NAME AND SPECIFIC FUNCTION 
-    vars = [['hu', vh.get_means], ['tg', vh.get_means], ['tx', vh.get_frost_days], 
-            ['qq', vh.get_par], ['rr', vh.get_sums], ['tn', vh.get_means], ['tx', vh.get_means]]
+    vars = [[rh, vh.get_means], [tair, vh.get_means], [t_max, vh.get_frost_days], 
+            [qq, vh.get_par], [precip, vh.get_sums], [t_min, vh.get_means], [t_max, vh.get_means]]
 
     # STEP 1: PREPARE DF ACCORDING TO BOUNDS
-    df = nh.get_nan_removal_df(sites_path, vars, var_path)
+    data = nh.get_all_vars_netcdf_with_bounds(sites_path, vars, var_path)
+    df = nh.get_nan_removal_df(data)
     uf.write_df_to_csv(df, nan_removal_path)
 
     # STEP 2: REMOVE ALL CLIMIDS WITH NANS 
@@ -59,9 +68,9 @@ def main():
 
     # STEP 5: CALCULATE VPD AND REARRANGE COLUMNS
     df = pd.read_csv(filtered_df_path)
-    df = vh.get_vpd(df, 'tg', 'hu')
-    df = df.rename(columns={'tg' : 'tair', 'rr':'precip', 'tx': 't_max', 'tn': 't_min'})
-    df = df.drop(columns=['hu', 'rss'])
+    df = vh.get_vpd(df, tair, rh)
+    df = df.rename(columns={tair : 'tair', precip:'precip', t_max: 't_max', t_min: 't_min'})
+    df = df.drop(columns=[rh, rss])
     cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd', 't_min', 't_max']
     df = uf.rearrange_df(df, cols)
     print(df)

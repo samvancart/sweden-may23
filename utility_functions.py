@@ -15,7 +15,8 @@ def get_files_in_folder(path):
     return files
 
 
-
+# GETS MIN AND MAX LAT AND LON FROM SITES FILE
+# ADDS BUFFER TO MAX VALS AND SUBTRACTS BUFFER FROM MIN VALS TO GET COORDINATE BOUNDS
 def get_bounds(sites_df, buffer=0.1):
     lat = sites_df.lat
     lon = sites_df.lon
