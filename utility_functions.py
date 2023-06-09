@@ -1,5 +1,6 @@
 import xarray as xr
 import numpy as np
+import pandas as pd
 import os
 
 
@@ -32,6 +33,7 @@ def round_coords(d, lat = 'lat', lon = 'lon', decimals=2):
     return d
 
 def year_and_month_to_cols(df):
+    df['time'] = pd.to_datetime(df['time'])
     year = df['time'].dt.year
     month = df['time'].dt.month
     df = df.assign(year=year, month=month)

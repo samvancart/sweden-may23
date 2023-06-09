@@ -36,12 +36,14 @@ def main():
     precip = 'rr'
     rss = 'rss'
 
-    # LIST OF VARIABLES. EACH ITEM INCLUDES VARIABLE NAME AND SPECIFIC FUNCTION 
+    # LIST OF VARIABLES. EACH ITEM INCLUDES VARIABLE NAME AND AGGREGATE FUNCTION 
     vars = [[rh, vh.get_means], [tair, vh.get_means], [t_max, vh.get_frost_days], 
             [qq, vh.get_par], [precip, vh.get_sums], [t_min, vh.get_means], [t_max, vh.get_means]]
 
     # STEP 1: PREPARE DF ACCORDING TO BOUNDS
-    data = nh.get_all_vars_netcdf_with_bounds(sites_path, vars, var_path)
+    sites_df = pd.read_csv(sites_path)
+    bnds = uf.get_bounds(sites_df)
+    data = nh.get_all_vars_netcdf_with_bounds(vh.process_vars_and_aggregate, vars, var_path, bnds)
     df = nh.get_nan_removal_df(data)
     uf.write_df_to_csv(df, nan_removal_path)
 
@@ -71,6 +73,7 @@ def main():
     df = vh.get_vpd(df, tair, rh)
     df = df.rename(columns={tair : 'tair', precip:'precip', t_max: 't_max', t_min: 't_min'})
     df = df.drop(columns=[rh, rss])
+    df = uf.year_and_month_to_cols(df)
     cols = ['year', 'month', 'climID', 'lat', 'lon', 'frost_days', 'tair', 'precip', 'par', 'vpd', 't_min', 't_max']
     df = uf.rearrange_df(df, cols)
     print(df)

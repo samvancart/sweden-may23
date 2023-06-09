@@ -9,7 +9,7 @@ import utility_functions as uf
 netcdfs = []
 
 
-def _preprocess1(x, lon_bnds, lat_bnds, year, month=1, day=1):
+def _preprocess_1_day_bounds(x, lon_bnds, lat_bnds, year, month=1, day=1):
 
     # Remove unwanted data by coordinates
     ds = x.where((x.latitude<=lat_bnds[1]) & (x.latitude>=lat_bnds[0]) & (x.longitude<=lon_bnds[1]) & (x.longitude>=lon_bnds[0]), drop=True)
@@ -19,8 +19,8 @@ def _preprocess1(x, lon_bnds, lat_bnds, year, month=1, day=1):
     return data
 
 
-def _preprocess2(x, coords, function):
-    ds = x.where((x['time.year']>2002) & (x['time.year']<2021), drop=True)
+def _preprocess_coords_aggregate(x, coords, function, start_year = 2002, end_year = 2021):
+    ds = x.where((x['time.year'] > start_year) & (x['time.year'] < end_year), drop=True)
     
     # ONE INDEX WITH ONLY THE NECESSARY COORDINATES
     data = ds.sel(latitude = coords['lat'].to_xarray(), longitude = coords['lon'].to_xarray(), method = 'nearest')
@@ -30,8 +30,8 @@ def _preprocess2(x, coords, function):
 
     return data
 
-def _preprocess3(x, lon_bnds, lat_bnds, function):
-    ds = x.where((x['time.year']>2002) & (x['time.year']<2021), drop=True)
+def _preprocess_bounds_aggregate(x, lon_bnds, lat_bnds, function, start_year = 2002, end_year = 2021):
+    ds = x.where((x['time.year'] > start_year) & (x['time.year'] < end_year), drop=True)
 
     # Remove unwanted data by coordinates
     data = ds.where((ds.latitude<=lat_bnds[1]) & (ds.latitude>=lat_bnds[0]) & (ds.longitude<=lon_bnds[1]) & (ds.longitude>=lon_bnds[0]), drop=True)
@@ -91,7 +91,7 @@ def process_vars2(vars, coords):
         path = f"data/netcdf/vars/{var}/"
 
 
-        partial_func = partial(_preprocess2, coords=coords, function=function)
+        partial_func = partial(_preprocess_coords_aggregate, coords=coords, function=function)
 
         # OPEN ALL DATASETS AT ONCE
         data = xr.open_mfdataset(
@@ -104,7 +104,7 @@ def process_vars2(vars, coords):
     return netcdfs
 
 # COMBINE ALL VARS INTO ONE NETCDF WITH COORDINATES WITHIN BOUNDS
-def process_vars3(vars, lat_bnds, lon_bnds, var_path):
+def process_vars_and_aggregate(vars, lat_bnds, lon_bnds, var_path):
 # PROCESS EACH VAR
     for v in vars:
         print(f'Processing variable {v[0]}...')
@@ -112,7 +112,7 @@ def process_vars3(vars, lat_bnds, lon_bnds, var_path):
         function = v[1]
         path = f"{var_path}/{var}/"
 
-        partial_func = partial(_preprocess3, lat_bnds=lat_bnds, lon_bnds=lon_bnds, function=function)
+        partial_func = partial(_preprocess_bounds_aggregate, lat_bnds=lat_bnds, lon_bnds=lon_bnds, function=function)
 
         # OPEN ALL DATASETS AT ONCE
         data = xr.open_mfdataset(

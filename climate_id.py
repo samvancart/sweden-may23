@@ -55,7 +55,7 @@ def climateIDs_for_sites_from_files(ref_df, sites_path):
 
 # GET NETCDF WITH LAT AND LON BOUNDS FOR 1 DAY
 def get_climID_reference_netcdf(netcdf_path, lat_bnds, lon_bnds, year):
-    partial_func = partial(vh._preprocess1, lat_bnds=lat_bnds, lon_bnds=lon_bnds, year=year)
+    partial_func = partial(vh._preprocess_1_day_bounds, lat_bnds=lat_bnds, lon_bnds=lon_bnds, year=year)
     data = xr.open_dataset(netcdf_path)
     data = partial_func(data)
     new = data.to_netcdf()
